@@ -1,0 +1,91 @@
+<!DOCTYPE html><html lang="en">
+<head><meta charset="UTF-8"/><title>HELPMAP</title>
+<style>
+body{font-family:Arial;background:#f2f2f2;padding:20px;}
+h1,h2{background:#004080;color:white;padding:10px;text-align:center;}
+textarea,input{width:100%;padding:10px;margin:10px 0;}
+button{padding:10px 15px;background:#004080;color:white;border:none;cursor:pointer;}
+.card{background:#fff;padding:15px;margin:10px 0;border-left:5px solid #004080;}
+.status{font-weight:bold;margin-top:5px;}
+</style></head><body onload="initApp()">
+
+<div id="loginScreen">
+  <h2>Login</h2>
+  <input id="username" placeholder="Your name"/>
+  <input id="familyContact" placeholder="Emergency contact"/>
+  <button onclick="login()">Login</button>
+</div>
+
+<div id="mainApp" style="display:none;">
+  <h1>Report Emergency</h1></br>
+  <form id="reportForm">
+    <textarea id="desc" placeholder="Describe emergency" required></textarea>
+    <button type="submit">Report</button>
+    <p id="locationStatus">Detecting location...</p>
+  </form>
+
+  <h2>Nearby Reports</h2>
+  <div id="reportsList"></div>
+</div>
+
+<script>
+let lat=null,lng=null;
+function initApp(){
+  const user=localStorage.getItem('user');
+  if(user){
+    document.getElementById('loginScreen').style.display='none';
+    document.getElementById('mainApp').style.display='block';
+    loadReports();
+  }
+  navigator.geolocation.getCurrentPosition(p=>{
+    lat=p.coords.latitude; lng=p.coords.longitude;
+    document.getElementById('locationStatus').innerText=`Location: (${lat.toFixed(4)},${lng.toFixed(4)})`;
+  },_=>document.getElementById('locationStatus').innerText='Allow location');
+}
+function login(){
+  const u=document.getElementById('username').value.trim();
+  const c=document.getElementById('familyContact').value.trim();
+  if(!u) return alert('Name required');
+  localStorage.setItem('user',u);
+  localStorage.setItem('contact',c);
+  initApp();
+}
+
+document.getElementById('reportForm').addEventListener('submit',e=>{
+  e.preventDefault();
+  const desc=document.getElementById('desc').value;
+  const user=localStorage.getItem('user');
+  const contact=localStorage.getItem('contact')||'N/A';
+  if(!lat||!lng) return alert('Waiting for location');
+  fetch('/report',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({lat,lng,desc,user,contact})})
+  .then(()=>{loadReports();document.getElementById('reportForm').reset();});
+});
+
+function loadReports(){
+  fetch('/reports').then(r=>r.json()).then(data=>{
+    const dl=document.getElementById('reportsList');
+    dl.innerHTML='';
+    data.reverse().forEach(r=>{
+      const d=document.createElement('div'); d.className='card';
+      d.innerHTML=`<div><strong>📍 Loc:</strong> (${r.lat.toFixed(4)},${r.lng.toFixed(4)})</div>
+      <div><strong>📝 Desc:</strong> ${r.desc}</div>
+      <div><strong>👤 By:</strong> ${r.user}</div>
+      <div><strong>📞 Contact:</strong> ${r.contact}</div>
+      <div><strong>🕒 Time:</strong> ${new Date(r.timestamp).toLocaleString()}</div>
+      <div class="status">${r.status}</div>
+      ${r.status.includes('🚨') ? `<button onclick="help('${r.timestamp}')">I will help</button>` : ''}`;
+      dl.appendChild(d);
+    });
+  });
+}
+
+function help(timestamp){
+  const user=localStorage.getItem('user');
+  fetch('/help',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({timestamp,user})})
+  .then(()=>loadReports());
+}
+</script>
+
+</body></html>
